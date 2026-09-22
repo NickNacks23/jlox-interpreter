@@ -10,7 +10,10 @@ class Parser {
   private static class ParseError extends RuntimeException {}
 
   private final List<Token> tokens;
-  private int current = 0;
+private int current = 0;
+
+private boolean allowExpression;
+private boolean foundExpression = false;
 
   Parser(List<Token> tokens) {
     this.tokens = tokens;
@@ -19,12 +22,35 @@ class Parser {
   List<Stmt> parse() {
     List<Stmt> statements = new ArrayList<>();
 
+    
+
     while (!isAtEnd()) {
       statements.add(declaration());
     }
 
     return statements;
   }
+
+
+
+Object parseRepl() {
+  allowExpression = true;
+  List<Stmt> statements = new ArrayList<>();
+
+  while (!isAtEnd()) {
+    statements.add(declaration());
+
+    if (foundExpression) {
+      Stmt last = statements.get(statements.size() - 1);
+      return ((Stmt.Expression) last).expression;
+    }
+
+    allowExpression = false;
+  }
+
+  return statements;
+}
+
 
   private Stmt declaration() {
     try {
@@ -61,11 +87,21 @@ class Parser {
     return new Stmt.Print(value);
   }
 
-  private Stmt expressionStatement() {
-    Expr expr = expression();
+  
+
+private Stmt expressionStatement() {
+  Expr expr = expression();
+
+  if (allowExpression && isAtEnd()) {
+    foundExpression = true;
+  } else {
     consume(SEMICOLON, "Expect ';' after expression.");
-    return new Stmt.Expression(expr);
   }
+
+  return new Stmt.Expression(expr);
+}
+
+
 
   private List<Stmt> block() {
     List<Stmt> statements = new ArrayList<>();
