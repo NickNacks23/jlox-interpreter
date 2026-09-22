@@ -3,6 +3,10 @@ package com.craftinginterpreters.lox;
 import java.util.List;
 
 class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
+
+private static Object uninitialized = new Object();
+
+
   final Environment globals = new Environment();
   private Environment environment = globals;
 
@@ -65,7 +69,8 @@ String interpret(Expr expression) {
 
   @Override
   public Void visitVarStmt(Stmt.Var stmt) {
-    Object value = null;
+
+Object value = uninitialized;
 
     if (stmt.initializer != null) {
       value = evaluate(stmt.initializer);
@@ -152,25 +157,37 @@ String interpret(Expr expression) {
     return evaluate(expr.right);
   }
 
-  @Override
-  public Object visitUnaryExpr(Expr.Unary expr) {
-    Object right = evaluate(expr.right);
+ 
+@Override
+public Object visitVariableExpr(Expr.Variable expr) {
+  Object value = environment.get(expr.name);
 
-    switch (expr.operator.type) {
-      case BANG:
-        return !isTruthy(right);
-      case MINUS:
-        checkNumberOperand(expr.operator, right);
-        return -(double)right;
-      default:
-        return null;
-    }
+  if (value == uninitialized) {
+    throw new RuntimeError(expr.name,
+        "Variable must be initialized before use.");
   }
 
-  @Override
-  public Object visitVariableExpr(Expr.Variable expr) {
-    return environment.get(expr.name);
+  return value;
+}
+
+
+  
+@Override
+public Object visitUnaryExpr(Expr.Unary expr) {
+  Object right = evaluate(expr.right);
+
+  switch (expr.operator.type) {
+    case BANG:
+      return !isTruthy(right);
+    case MINUS:
+      checkNumberOperand(expr.operator, right);
+      return -(double)right;
   }
+
+  return null;
+}
+
+
 
   private void execute(Stmt stmt) {
     stmt.accept(this);
