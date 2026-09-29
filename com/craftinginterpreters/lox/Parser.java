@@ -53,16 +53,52 @@ Object parseRepl() {
   return statements;
 }
 
-
-  private Stmt declaration() {
-    try {
-      if (match(VAR)) return varDeclaration();
-      return statement();
-    } catch (ParseError error) {
-      synchronize();
-      return null;
+private Stmt declaration() {
+  try {
+    if (check(FUN) && checkNext(IDENTIFIER)) {
+      consume(FUN, null);
+      return function("function");
     }
+
+    if (match(VAR)) return varDeclaration();
+
+    return statement();
+  } catch (ParseError error) {
+    synchronize();
+    return null;
   }
+}
+  
+
+private Stmt.Function function(String kind) {
+  Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
+  return new Stmt.Function(name, functionBody(kind));
+}
+
+private Expr.Function functionBody(String kind) {
+  consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
+
+  List<Token> parameters = new ArrayList<>();
+
+  if (!check(RIGHT_PAREN)) {
+    do {
+      if (parameters.size() >= 255) {
+        error(peek(), "Can't have more than 255 parameters.");
+      }
+
+      parameters.add(
+          consume(IDENTIFIER, "Expect parameter name."));
+    } while (match(COMMA));
+  }
+
+  consume(RIGHT_PAREN, "Expect ')' after parameters.");
+
+  consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
+  List<Stmt> body = block();
+
+  return new Expr.Function(parameters, body);
+}
+
 
   private Stmt varDeclaration() {
     Token name = consume(IDENTIFIER, "Expect variable name.");
@@ -102,10 +138,22 @@ private Stmt statement() {
   if (match(WHILE)) return whileStatement();
   if (match(BREAK)) return breakStatement();
 
+  if (match(RETURN)) return returnStatement();
+
   return expressionStatement();
 }
 
+private Stmt returnStatement() {
+  Token keyword = previous();
 
+  Expr value = null;
+  if (!check(SEMICOLON)) {
+    value = expression();
+  }
+
+  consume(SEMICOLON, "Expect ';' after return value.");
+  return new Stmt.Return(keyword, value);
+}
 
 
 private Stmt breakStatement() {
@@ -319,36 +367,76 @@ private Stmt expressionStatement() {
   }
 
   private Expr unary() {
-    if (match(BANG, MINUS)) {
-      Token operator = previous();
-      Expr right = unary();
-      return new Expr.Unary(operator, right);
-    }
-
-    return primary();
+  if (match(BANG, MINUS)) {
+    Token operator = previous();
+    Expr right = unary();
+    return new Expr.Unary(operator, right);
   }
 
-  private Expr primary() {
-    if (match(FALSE)) return new Expr.Literal(false);
-    if (match(TRUE)) return new Expr.Literal(true);
-    if (match(NIL)) return new Expr.Literal(null);
+  return call();
+}
 
-    if (match(NUMBER, STRING)) {
-      return new Expr.Literal(previous().literal);
-    }
+private Expr call() {
+  Expr expr = primary();
 
-    if (match(IDENTIFIER)) {
-      return new Expr.Variable(previous());
-    }
-
+  while (true) {
     if (match(LEFT_PAREN)) {
-      Expr expr = expression();
-      consume(RIGHT_PAREN, "Expect ')' after expression.");
-      return new Expr.Grouping(expr);
+      expr = finishCall(expr);
+    } else {
+      break;
     }
-
-    throw error(peek(), "Expect expression.");
   }
+
+  return expr;
+}
+
+private Expr finishCall(Expr callee) {
+  List<Expr> arguments = new ArrayList<>();
+
+  if (!check(RIGHT_PAREN)) {
+    do {
+      if (arguments.size() >= 255) {
+        error(peek(), "Can't have more than 255 arguments.");
+      }
+
+      arguments.add(expression());
+    } while (match(COMMA));
+  }
+
+  Token paren = consume(
+      RIGHT_PAREN,
+      "Expect ')' after arguments.");
+
+  return new Expr.Call(callee, paren, arguments);
+}
+
+private Expr primary() {
+  if (match(FALSE)) return new Expr.Literal(false);
+  if (match(TRUE)) return new Expr.Literal(true);
+  if (match(NIL)) return new Expr.Literal(null);
+
+  if (match(NUMBER, STRING)) {
+    return new Expr.Literal(previous().literal);
+  }
+
+  // Anonymous function expression.
+  if (match(FUN)) {
+    return functionBody("function");
+  }
+
+  if (match(IDENTIFIER)) {
+    return new Expr.Variable(previous());
+  }
+
+  if (match(LEFT_PAREN)) {
+    Expr expr = expression();
+    consume(RIGHT_PAREN, "Expect ')' after expression.");
+    return new Expr.Grouping(expr);
+  }
+
+  throw error(peek(), "Expect expression.");
+}  
+
 
   private boolean match(TokenType... types) {
     for (TokenType type : types) {
@@ -367,10 +455,20 @@ private Stmt expressionStatement() {
     throw error(peek(), message);
   }
 
+
+
+
   private boolean check(TokenType type) {
     if (isAtEnd()) return false;
     return peek().type == type;
   }
+
+  private boolean checkNext(TokenType type) {
+  if (isAtEnd()) return false;
+  if (tokens.get(current + 1).type == EOF) return false;
+
+  return tokens.get(current + 1).type == type;
+}
 
   private Token advance() {
     if (!isAtEnd()) current++;
