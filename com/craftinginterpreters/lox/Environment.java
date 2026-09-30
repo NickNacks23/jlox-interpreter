@@ -1,11 +1,18 @@
 package com.craftinginterpreters.lox;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 class Environment {
   final Environment enclosing;
-  private final Map<String, Object> values = new HashMap<>();
+
+  // Globals still use names.
+  private final Map<String, Object> globals = new HashMap<>();
+
+  // Local variables use numeric slots.
+  private final List<Object> values = new ArrayList<>();
 
   Environment() {
     enclosing = null;
@@ -15,38 +22,30 @@ class Environment {
     this.enclosing = enclosing;
   }
 
-  Object getAt(int distance, String name) {
-  return ancestor(distance).values.get(name);
-}
-
-void assignAt(int distance, Token name, Object value) {
-  ancestor(distance).values.put(name.lexeme, value);
-}
-
-private Environment ancestor(int distance) {
-  Environment environment = this;
-
-  for (int i = 0; i < distance; i++) {
-    environment = environment.enclosing;
+  void define(String name, Object value) {
+    if (enclosing == null) {
+      globals.put(name, value);
+    } else {
+      values.add(value);
+    }
   }
 
-  return environment;
-}
-
   Object get(Token name) {
-    if (values.containsKey(name.lexeme)) {
-      return values.get(name.lexeme);
+    if (globals.containsKey(name.lexeme)) {
+      return globals.get(name.lexeme);
     }
 
-    if (enclosing != null) return enclosing.get(name);
+    if (enclosing != null) {
+      return enclosing.get(name);
+    }
 
     throw new RuntimeError(name,
         "Undefined variable '" + name.lexeme + "'.");
   }
 
   void assign(Token name, Object value) {
-    if (values.containsKey(name.lexeme)) {
-      values.put(name.lexeme, value);
+    if (globals.containsKey(name.lexeme)) {
+      globals.put(name.lexeme, value);
       return;
     }
 
@@ -59,7 +58,21 @@ private Environment ancestor(int distance) {
         "Undefined variable '" + name.lexeme + "'.");
   }
 
-  void define(String name, Object value) {
-    values.put(name, value);
+  Object getAt(int distance, int slot) {
+    return ancestor(distance).values.get(slot);
+  }
+
+  void assignAt(int distance, int slot, Object value) {
+    ancestor(distance).values.set(slot, value);
+  }
+
+  private Environment ancestor(int distance) {
+    Environment environment = this;
+
+    for (int i = 0; i < distance; i++) {
+      environment = environment.enclosing;
+    }
+
+    return environment;
   }
 }

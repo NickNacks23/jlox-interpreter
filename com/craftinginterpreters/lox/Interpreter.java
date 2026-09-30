@@ -16,6 +16,9 @@ private static Object uninitialized = new Object();
 
   private final Map<Expr, Integer> locals = new HashMap<>();
 
+
+  private final Map<Expr, Integer> slots = new HashMap<>();
+
   void interpret(List<Stmt> statements) {
     try {
       for (Stmt statement : statements) {
@@ -178,7 +181,8 @@ public Object visitAssignExpr(Expr.Assign expr) {
   Integer distance = locals.get(expr);
 
   if (distance != null) {
-    environment.assignAt(distance, expr.name, value);
+    environment.assignAt(
+        distance, slots.get(expr), value);
   } else {
     globals.assign(expr.name, value);
   }
@@ -266,7 +270,8 @@ private Object lookUpVariable(Token name, Expr expr) {
   Integer distance = locals.get(expr);
 
   if (distance != null) {
-    return environment.getAt(distance, name.lexeme);
+    return environment.getAt(
+        distance, slots.get(expr));
   } else {
     return globals.get(name);
   }
@@ -288,8 +293,9 @@ public Object visitUnaryExpr(Expr.Unary expr) {
   return null;
 }
 
-void resolve(Expr expr, int depth) {
+void resolve(Expr expr, int depth, int slot) {
   locals.put(expr, depth);
+  slots.put(expr, slot);
 }
 
   private void execute(Stmt stmt) {
