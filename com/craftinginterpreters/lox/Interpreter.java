@@ -1,7 +1,9 @@
 package com.craftinginterpreters.lox;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   private static class BreakException extends RuntimeException {}
@@ -11,6 +13,8 @@ private static Object uninitialized = new Object();
 
   final Environment globals = new Environment();
   private Environment environment = globals;
+
+  private final Map<Expr, Integer> locals = new HashMap<>();
 
   void interpret(List<Stmt> statements) {
     try {
@@ -168,11 +172,19 @@ public Void visitWhileStmt(Stmt.While stmt) {
 
 
   @Override
-  public Object visitAssignExpr(Expr.Assign expr) {
-    Object value = evaluate(expr.value);
-    environment.assign(expr.name, value);
-    return value;
+public Object visitAssignExpr(Expr.Assign expr) {
+  Object value = evaluate(expr.value);
+
+  Integer distance = locals.get(expr);
+
+  if (distance != null) {
+    environment.assignAt(distance, expr.name, value);
+  } else {
+    globals.assign(expr.name, value);
   }
+
+  return value;
+}
 
   @Override
   public Object visitBinaryExpr(Expr.Binary expr) {
@@ -247,16 +259,18 @@ public Void visitWhileStmt(Stmt.While stmt) {
  
 @Override
 public Object visitVariableExpr(Expr.Variable expr) {
-  Object value = environment.get(expr.name);
-
-  if (value == uninitialized) {
-    throw new RuntimeError(expr.name,
-        "Variable must be initialized before use.");
-  }
-
-  return value;
+  return lookUpVariable(expr.name, expr);
 }
 
+private Object lookUpVariable(Token name, Expr expr) {
+  Integer distance = locals.get(expr);
+
+  if (distance != null) {
+    return environment.getAt(distance, name.lexeme);
+  } else {
+    return globals.get(name);
+  }
+}
 
   
 @Override
@@ -274,7 +288,9 @@ public Object visitUnaryExpr(Expr.Unary expr) {
   return null;
 }
 
-
+void resolve(Expr expr, int depth) {
+  locals.put(expr, depth);
+}
 
   private void execute(Stmt stmt) {
     stmt.accept(this);
@@ -308,6 +324,8 @@ public Object visitUnaryExpr(Expr.Unary expr) {
 
     throw new RuntimeError(operator, "Operands must be numbers.");
   }
+
+  
 
   private String stringify(Object object) {
     if (object == null) return "nil";
