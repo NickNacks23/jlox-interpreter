@@ -19,6 +19,37 @@ private static Object uninitialized = new Object();
 
   private final Map<Expr, Integer> slots = new HashMap<>();
 
+
+
+
+    Interpreter() {
+  globals.define(
+      "Array",
+      new LoxCallable() {
+        @Override
+        public int arity() {
+          return 1;
+        }
+
+        @Override
+        public Object call(
+            Interpreter interpreter,
+            List<Object> arguments) {
+
+          int size =
+              (int)(double)arguments.get(0);
+
+          return new LoxArray(size);
+        }
+
+        @Override
+        public String toString() {
+          return "<native fn>";
+        }
+      });
+}
+
+
   void interpret(List<Stmt> statements) {
     try {
       for (Stmt statement : statements) {
