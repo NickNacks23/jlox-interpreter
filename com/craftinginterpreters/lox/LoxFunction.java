@@ -39,6 +39,7 @@ class LoxFunction implements LoxCallable {
 
   @Override
   public int arity() {
+    if (declaration.parameters == null) return 0;
     return declaration.parameters.size();
   }
 
@@ -49,10 +50,12 @@ class LoxFunction implements LoxCallable {
 
     Environment environment = new Environment(closure);
 
-    for (int i = 0; i < declaration.parameters.size(); i++) {
-      environment.define(
-          declaration.parameters.get(i).lexeme,
-          arguments.get(i));
+    if (declaration.parameters != null) {
+      for (int i = 0; i < declaration.parameters.size(); i++) {
+        environment.define(
+            declaration.parameters.get(i).lexeme,
+            arguments.get(i));
+      }
     }
 
     try {
@@ -70,6 +73,10 @@ class LoxFunction implements LoxCallable {
     }
 
     return null;
+  }
+
+  boolean isGetter() {
+    return declaration.parameters == null;
   }
 
   @Override

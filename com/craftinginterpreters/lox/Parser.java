@@ -97,8 +97,20 @@ private Stmt classDeclaration() {
 }
   
 
+
 private Stmt.Function function(String kind) {
   Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
+
+  // Getter: a method with no parameter list.
+  if (kind.equals("method") && !check(LEFT_PAREN)) {
+    consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
+    List<Stmt> body = block();
+
+    return new Stmt.Function(
+        name,
+        new Expr.Function(null, body));
+  }
+
   return new Stmt.Function(name, functionBody(kind));
 }
 

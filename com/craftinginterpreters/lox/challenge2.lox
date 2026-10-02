@@ -1,9 +1,12 @@
-fun thrice(fn) {
-  for (var i = 1; i <= 3; i = i + 1) {
-    fn(i);
+class Circle {
+  init(radius) {
+    this.radius = radius;
+  }
+
+  area {
+    return 3.141592653 * this.radius * this.radius;
   }
 }
 
-thrice(fun (a) {
-  print a;
-});
+var circle = Circle(4);
+print circle.area;

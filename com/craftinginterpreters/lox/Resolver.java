@@ -132,10 +132,12 @@ private ClassType currentClass = ClassType.NONE;
 
     beginScope();
 
-    for (Token param : function.parameters) {
-      declare(param);
-      define(param);
-    }
+    if (function.parameters != null) {
+  for (Token param : function.parameters) {
+    declare(param);
+    define(param);
+  }
+}
 
     resolve(function.body);
 
