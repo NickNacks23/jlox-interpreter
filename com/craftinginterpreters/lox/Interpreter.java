@@ -237,6 +237,97 @@ public Object visitAssignExpr(Expr.Assign expr) {
     }
   }
 
+
+
+
+
+
+  @Override
+public Void visitClassStmt(Stmt.Class stmt) {
+  Map<String, LoxFunction> classMethods = new HashMap<>();
+
+  for (Stmt.Function method : stmt.classMethods) {
+    LoxFunction function =
+        new LoxFunction(
+            method.name.lexeme,
+            method.function,
+            environment,
+            false);
+
+    classMethods.put(method.name.lexeme, function);
+  }
+
+  LoxClass metaclass =
+      new LoxClass(
+          null,
+          stmt.name.lexeme + " metaclass",
+          classMethods);
+
+  Map<String, LoxFunction> methods = new HashMap<>();
+
+  for (Stmt.Function method : stmt.methods) {
+    boolean isInitializer =
+        method.name.lexeme.equals("init");
+
+    LoxFunction function =
+        new LoxFunction(
+            method.name.lexeme,
+            method.function,
+            environment,
+            isInitializer);
+
+    methods.put(method.name.lexeme, function);
+  }
+
+  LoxClass klass =
+      new LoxClass(
+          metaclass,
+          stmt.name.lexeme,
+          methods);
+
+  environment.define(stmt.name.lexeme, klass);
+
+  return null;
+}
+
+
+
+@Override
+public Object visitThisExpr(Expr.This expr) {
+  return lookUpVariable(expr.keyword, expr);
+}
+
+@Override
+public Object visitSetExpr(Expr.Set expr) {
+  Object object = evaluate(expr.object);
+
+  if (!(object instanceof LoxInstance)) {
+    throw new RuntimeError(
+        expr.name,
+        "Only instances have fields.");
+  }
+
+  Object value = evaluate(expr.value);
+
+  ((LoxInstance)object).set(expr.name, value);
+
+  return value;
+}
+
+  @Override
+public Object visitGetExpr(Expr.Get expr) {
+  Object object = evaluate(expr.object);
+
+  if (object instanceof LoxInstance) {
+    return ((LoxInstance)object).get(expr.name);
+  }
+
+  throw new RuntimeError(
+      expr.name,
+      "Only instances have properties.");
+}
+
+
   @Override
   public Object visitGroupingExpr(Expr.Grouping expr) {
     return evaluate(expr.expression);

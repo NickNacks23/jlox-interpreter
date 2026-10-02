@@ -55,10 +55,14 @@ Object parseRepl() {
 
 private Stmt declaration() {
   try {
+    
+    if (match(CLASS)) return classDeclaration();
+
     if (check(FUN) && checkNext(IDENTIFIER)) {
       consume(FUN, null);
       return function("function");
     }
+    
 
     if (match(VAR)) return varDeclaration();
 
@@ -67,6 +71,29 @@ private Stmt declaration() {
     synchronize();
     return null;
   }
+}
+
+private Stmt classDeclaration() {
+  Token name = consume(IDENTIFIER, "Expect class name.");
+
+  List<Stmt.Function> methods = new ArrayList<>();
+  List<Stmt.Function> classMethods = new ArrayList<>();
+
+  consume(LEFT_BRACE, "Expect '{' before class body.");
+
+  while (!check(RIGHT_BRACE) && !isAtEnd()) {
+    boolean isClassMethod = match(CLASS);
+
+    if (isClassMethod) {
+      classMethods.add(function("method"));
+    } else {
+      methods.add(function("method"));
+    }
+  }
+
+  consume(RIGHT_BRACE, "Expect '}' after class body.");
+
+  return new Stmt.Class(name, methods, classMethods);
 }
   
 
@@ -283,14 +310,21 @@ private Stmt expressionStatement() {
       Token equals = previous();
       Expr value = assignment();
 
-      if (expr instanceof Expr.Variable) {
-        Token name = ((Expr.Variable)expr).name;
-        return new Expr.Assign(name, value);
-      }
 
-      error(equals, "Invalid assignment target.");
+
+        if (expr instanceof Expr.Variable) {
+  Token name = ((Expr.Variable)expr).name;
+  return new Expr.Assign(name, value);
+} else if (expr instanceof Expr.Get) {
+  Expr.Get get = (Expr.Get)expr;
+  return new Expr.Set(get.object, get.name, value);
+}
+
+error(equals, "Invalid assignment target.");
+      
+
+
     }
-
     return expr;
   }
 
@@ -382,6 +416,11 @@ private Expr call() {
   while (true) {
     if (match(LEFT_PAREN)) {
       expr = finishCall(expr);
+    } else if (match(DOT)) {
+      Token name = consume(
+          IDENTIFIER,
+          "Expect property name after '.'.");
+      expr = new Expr.Get(expr, name);
     } else {
       break;
     }
@@ -423,6 +462,10 @@ private Expr primary() {
   if (match(FUN)) {
     return functionBody("function");
   }
+
+  if (match(THIS)) {
+  return new Expr.This(previous());
+}
 
   if (match(IDENTIFIER)) {
     return new Expr.Variable(previous());
