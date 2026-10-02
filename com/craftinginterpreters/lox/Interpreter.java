@@ -244,53 +244,130 @@ public Object visitAssignExpr(Expr.Assign expr) {
 
   @Override
 public Void visitClassStmt(Stmt.Class stmt) {
-  Map<String, LoxFunction> classMethods = new HashMap<>();
+  Object superclass = null;
 
-  for (Stmt.Function method : stmt.classMethods) {
-    LoxFunction function =
-        new LoxFunction(
-            method.name.lexeme,
-            method.function,
-            environment,
-            false);
+  if (stmt.superclass != null) {
+    superclass = evaluate(stmt.superclass);
 
-    classMethods.put(method.name.lexeme, function);
+    if (!(superclass instanceof LoxClass)) {
+      throw new RuntimeError(
+          ((Expr.Variable)stmt.superclass).name,
+          "Superclass must be a class.");
+    }
   }
 
-  LoxClass metaclass =
-      new LoxClass(
-          null,
-          stmt.name.lexeme + " metaclass",
-          classMethods);
+  // If this is a subclass, create the runtime
+  // environment containing "super".
+  Environment previousEnvironment = environment;
 
-  Map<String, LoxFunction> methods = new HashMap<>();
-
-  for (Stmt.Function method : stmt.methods) {
-    boolean isInitializer =
-        method.name.lexeme.equals("init");
-
-    LoxFunction function =
-        new LoxFunction(
-            method.name.lexeme,
-            method.function,
-            environment,
-            isInitializer);
-
-    methods.put(method.name.lexeme, function);
+  if (stmt.superclass != null) {
+    environment = new Environment(environment);
+    environment.define("super", superclass);
   }
 
-  LoxClass klass =
-      new LoxClass(
-          metaclass,
-          stmt.name.lexeme,
-          methods);
+  try {
+    // Challenge 1: start with methods supplied by traits.
+    Map<String, LoxFunction> methods =
+        applyTraits(stmt.traits);
 
-  environment.define(stmt.name.lexeme, klass);
+    // Add the class's own instance methods.
+    for (Stmt.Function method : stmt.methods) {
+      boolean isInitializer =
+          method.name.lexeme.equals("init");
+
+      LoxFunction function =
+          new LoxFunction(
+              method.name.lexeme,
+              method.function,
+              environment,
+              isInitializer);
+
+      methods.put(
+          method.name.lexeme,
+          function);
+    }
+
+    // Preserve Chapter 12 static/class methods.
+    Map<String, LoxFunction> classMethods =
+        new HashMap<>();
+
+    for (Stmt.Function method : stmt.classMethods) {
+      LoxFunction function =
+          new LoxFunction(
+              method.name.lexeme,
+              method.function,
+              environment,
+              false);
+
+      classMethods.put(
+          method.name.lexeme,
+          function);
+    }
+
+    LoxClass metaclass =
+        new LoxClass(
+            null,
+            stmt.name.lexeme + " metaclass",
+            null,
+            classMethods);
+
+    LoxClass klass =
+        new LoxClass(
+            metaclass,
+            stmt.name.lexeme,
+            (LoxClass)superclass,
+            methods);
+
+    // Restore the real declaration environment before
+    // defining the class variable.
+    environment = previousEnvironment;
+
+    environment.define(
+        stmt.name.lexeme,
+        klass);
+
+  } finally {
+    environment = previousEnvironment;
+  }
 
   return null;
 }
 
+@Override
+public Object visitSuperExpr(Expr.Super expr) {
+  Integer distance = locals.get(expr);
 
+  LoxClass superclass =
+      (LoxClass)environment.getAt(
+          distance,
+          slots.get(expr));
+
+  // "this" lives one scope closer than "super".
+  LoxInstance object =
+      (LoxInstance)environment.getAt(
+          distance - 1,
+          0);
+
+  LoxFunction method =
+      superclass.findMethod(
+          expr.method.lexeme);
+
+  if (method == null) {
+    throw new RuntimeError(
+        expr.method,
+        "Undefined property '" +
+        expr.method.lexeme + "'.");
+  }
+
+  LoxFunction bound = method.bind(object);
+
+  // Preserve your Chapter 12 getter behavior.
+  if (bound.isGetter()) {
+    return bound.call(this, null);
+  }
+
+  return bound;
+}
 
 @Override
 public Object visitThisExpr(Expr.This expr) {
@@ -361,6 +438,45 @@ public Object visitGetExpr(Expr.Get expr) {
   }
 
  
+
+@Override
+public Void visitTraitStmt(Stmt.Trait stmt) {
+  Map<String, LoxFunction> methods =
+      applyTraits(stmt.traits);
+
+  for (Stmt.Function method : stmt.methods) {
+    if (methods.containsKey(method.name.lexeme)) {
+      throw new RuntimeError(
+          method.name,
+          "A previous trait declares a method named '" +
+          method.name.lexeme + "'.");
+    }
+
+    LoxFunction function =
+        new LoxFunction(
+            method.name.lexeme,
+            method.function,
+            environment,
+            false);
+
+    methods.put(
+        method.name.lexeme,
+        function);
+  }
+
+  LoxTrait trait =
+      new LoxTrait(stmt.name, methods);
+
+  // Define the completed trait directly.
+  // This preserves your slot-based local environment system.
+  environment.define(
+      stmt.name.lexeme,
+      trait);
+
+  return null;
+}
+
+
 @Override
 public Object visitVariableExpr(Expr.Variable expr) {
   return lookUpVariable(expr.name, expr);
@@ -431,7 +547,44 @@ void resolve(Expr expr, int depth, int slot) {
     throw new RuntimeError(operator, "Operands must be numbers.");
   }
 
-  
+  private Map<String, LoxFunction> applyTraits(
+    List<Expr> traits) {
+
+  Map<String, LoxFunction> methods =
+      new HashMap<>();
+
+  for (Expr traitExpr : traits) {
+    Object traitObject = evaluate(traitExpr);
+
+    if (!(traitObject instanceof LoxTrait)) {
+      Token name =
+          ((Expr.Variable)traitExpr).name;
+
+      throw new RuntimeError(
+          name,
+          "'" + name.lexeme +
+          "' is not a trait.");
+    }
+
+    LoxTrait trait =
+        (LoxTrait)traitObject;
+
+    for (String name : trait.methods.keySet()) {
+      if (methods.containsKey(name)) {
+        throw new RuntimeError(
+            trait.name,
+            "A previous trait declares a method named '" +
+            name + "'.");
+      }
+
+      methods.put(
+          name,
+          trait.methods.get(name));
+    }
+  }
+
+  return methods;
+}
 
   private String stringify(Object object) {
     if (object == null) return "nil";

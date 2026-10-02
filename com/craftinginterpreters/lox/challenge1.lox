@@ -1,0 +1,13 @@
+trait A {
+  test() {
+    print "A";
+  }
+}
+
+trait B {
+  test() {
+    print "B";
+  }
+}
+
+class C with A, B {}

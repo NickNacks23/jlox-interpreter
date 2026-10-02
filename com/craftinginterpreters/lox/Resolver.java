@@ -19,9 +19,12 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
   METHOD
 }
 
+
 private enum ClassType {
   NONE,
-  CLASS
+  CLASS,
+  SUBCLASS,
+  TRAIT
 }
 
 private ClassType currentClass = ClassType.NONE;
@@ -174,35 +177,79 @@ public Void visitClassStmt(Stmt.Class stmt) {
   declare(stmt.name);
   define(stmt.name);
 
-  // Scope containing "this".
+  if (stmt.superclass != null &&
+      stmt.name.lexeme.equals(
+          ((Expr.Variable)stmt.superclass).name.lexeme)) {
+    Lox.error(
+        ((Expr.Variable)stmt.superclass).name,
+        "A class can't inherit from itself.");
+  }
+
+  // Resolve superclass.
+  if (stmt.superclass != null) {
+    currentClass = ClassType.SUBCLASS;
+    resolve(stmt.superclass);
+
+    // Implicit "super" scope.
+    beginScope();
+
+    int superSlot = scopes.peek().size();
+
+    scopes.peek().put(
+        "super",
+        new Variable(
+            ((Expr.Variable)stmt.superclass).name,
+            VariableState.READ,
+            superSlot));
+  }
+
+  // Resolve applied traits.
+  for (Expr trait : stmt.traits) {
+    resolve(trait);
+  }
+
+  // Implicit "this" scope.
   beginScope();
 
-  // "this" is an implicit variable. Mark it READ so the
-  // unused-variable challenge from Chapter 11 doesn't complain.
-  int slot = scopes.peek().size();
+  int thisSlot = scopes.peek().size();
+
   scopes.peek().put(
       "this",
-      new Variable(stmt.name, VariableState.READ, slot));
+      new Variable(
+          stmt.name,
+          VariableState.READ,
+          thisSlot));
 
   // Normal instance methods.
   for (Stmt.Function method : stmt.methods) {
-    FunctionType declaration = FunctionType.METHOD;
+    FunctionType declaration =
+        FunctionType.METHOD;
 
     if (method.name.lexeme.equals("init")) {
-      declaration = FunctionType.INITIALIZER;
+      declaration =
+          FunctionType.INITIALIZER;
     }
 
-    resolveFunction(method.function, declaration);
+    resolveFunction(
+        method.function,
+        declaration);
   }
 
-  // Challenge 1: class/static methods.
+  // Preserve Chapter 12 class/static methods.
   for (Stmt.Function method : stmt.classMethods) {
-    resolveFunction(method.function, FunctionType.METHOD);
+    resolveFunction(
+        method.function,
+        FunctionType.METHOD);
   }
 
   endScope();
 
+  if (stmt.superclass != null) {
+    endScope();
+  }
+
   currentClass = enclosingClass;
+
   return null;
 }
 
@@ -211,6 +258,73 @@ public Void visitGetExpr(Expr.Get expr) {
   resolve(expr.object);
   return null;
 }
+
+
+
+
+@Override
+public Void visitTraitStmt(Stmt.Trait stmt) {
+  declare(stmt.name);
+  define(stmt.name);
+
+  ClassType enclosingClass = currentClass;
+  currentClass = ClassType.TRAIT;
+
+  // A trait can compose other traits.
+  for (Expr trait : stmt.traits) {
+    resolve(trait);
+  }
+
+  // Trait methods can use "this".
+  beginScope();
+
+  int thisSlot = scopes.peek().size();
+
+  scopes.peek().put(
+      "this",
+      new Variable(
+          stmt.name,
+          VariableState.READ,
+          thisSlot));
+
+  for (Stmt.Function method : stmt.methods) {
+    resolveFunction(
+        method.function,
+        FunctionType.METHOD);
+  }
+
+  endScope();
+
+  currentClass = enclosingClass;
+
+  return null;
+}
+
+
+@Override
+public Void visitSuperExpr(Expr.Super expr) {
+  if (currentClass == ClassType.NONE) {
+    Lox.error(
+        expr.keyword,
+        "Can't use 'super' outside of a class.");
+  } else if (currentClass == ClassType.TRAIT) {
+    Lox.error(
+        expr.keyword,
+        "Can't use 'super' in a trait.");
+  } else if (currentClass != ClassType.SUBCLASS) {
+    Lox.error(
+        expr.keyword,
+        "Can't use 'super' in a class with no superclass.");
+  }
+
+  resolveLocal(
+      expr,
+      expr.keyword,
+      true);
+
+  return null;
+}
+
 
 
 @Override

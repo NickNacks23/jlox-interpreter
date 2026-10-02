@@ -14,6 +14,7 @@ abstract class Stmt {
     R visitFunctionStmt(Function stmt);
     R visitReturnStmt(Return stmt);
     R visitClassStmt(Class stmt);
+    R visitTraitStmt(Trait stmt);
   }
 
   static class Block extends Stmt {
@@ -31,9 +32,14 @@ abstract class Stmt {
 
 
 static class Class extends Stmt {
-  Class(Token name, List<Stmt.Function> methods,
+  Class(Token name,
+        Expr superclass,
+        List<Expr> traits,
+        List<Stmt.Function> methods,
         List<Stmt.Function> classMethods) {
     this.name = name;
+    this.superclass = superclass;
+    this.traits = traits;
     this.methods = methods;
     this.classMethods = classMethods;
   }
@@ -44,10 +50,30 @@ static class Class extends Stmt {
   }
 
   final Token name;
+  final Expr superclass;
+  final List<Expr> traits;
   final List<Stmt.Function> methods;
   final List<Stmt.Function> classMethods;
 }
 
+static class Trait extends Stmt {
+  Trait(Token name,
+        List<Expr> traits,
+        List<Stmt.Function> methods) {
+    this.name = name;
+    this.traits = traits;
+    this.methods = methods;
+  }
+
+  @Override
+  <R> R accept(Visitor<R> visitor) {
+    return visitor.visitTraitStmt(this);
+  }
+
+  final Token name;
+  final List<Expr> traits;
+  final List<Stmt.Function> methods;
+}
 
 static class Break extends Stmt {
   Break() {}
