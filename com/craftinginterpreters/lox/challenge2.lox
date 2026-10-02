@@ -1,12 +1,15 @@
-class Circle {
-  init(radius) {
-    this.radius = radius;
-  }
-
-  area {
-    return 3.141592653 * this.radius * this.radius;
+class Doughnut {
+  cook() {
+    print "Fry until golden brown.";
+    inner();
+    print "Place in a nice box.";
   }
 }
 
-var circle = Circle(4);
-print circle.area;
+class BostonCream < Doughnut {
+  cook() {
+    print "Pipe full of custard and coat with chocolate.";
+  }
+}
+
+BostonCream().cook();

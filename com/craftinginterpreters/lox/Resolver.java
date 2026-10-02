@@ -220,6 +220,15 @@ public Void visitClassStmt(Stmt.Class stmt) {
           VariableState.READ,
           thisSlot));
 
+          int innerSlot = scopes.peek().size();
+
+scopes.peek().put(
+    "inner",
+    new Variable(
+        stmt.name,
+        VariableState.READ,
+        innerSlot));
+
   // Normal instance methods.
   for (Stmt.Function method : stmt.methods) {
     FunctionType declaration =

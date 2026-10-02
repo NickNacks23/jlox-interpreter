@@ -26,16 +26,53 @@ class LoxFunction implements LoxCallable {
     this.isInitializer = isInitializer;
   }
 
-  LoxFunction bind(LoxInstance instance) {
-    Environment environment = new Environment(closure);
-    environment.define("this", instance);
+  
 
-    return new LoxFunction(
-        name,
-        declaration,
-        environment,
-        isInitializer);
+LoxFunction bind(LoxInstance instance) {
+  return bind(instance, null);
+}
+
+LoxFunction bind(
+    LoxInstance instance,
+    LoxFunction inner) {
+
+  Environment environment =
+      new Environment(closure);
+
+  environment.define("this", instance);
+
+  if (inner == null) {
+    environment.define(
+        "inner",
+        new LoxCallable() {
+          @Override
+          public int arity() {
+            return 0;
+          }
+
+          @Override
+          public Object call(
+              Interpreter interpreter,
+              List<Object> arguments) {
+            return null;
+          }
+
+          @Override
+          public String toString() {
+            return "<inner>";
+          }
+        });
+  } else {
+    environment.define("inner", inner);
   }
+
+  return new LoxFunction(
+      name,
+      declaration,
+      environment,
+      isInitializer);
+}
+
 
   @Override
   public int arity() {
